@@ -7,7 +7,7 @@
   "authors": [
     {
       "name": "Elvin Agalarov",
-      "homepage": "https://github.com/elvinaqalarov99/spectra"
+      "homepage": "https://github.com/elvinaqalarov99"
     }
   ],
   "require": {
@@ -26,5 +26,9 @@
       ]
     }
   },
-  "minimum-stability": "stable"
+  "minimum-stability": "stable",
+  "support": {
+    "issues": "https://github.com/elvinaqalarov99/spectra-laravel/issues",
+    "source": "https://github.com/elvinaqalarov99/spectra-laravel"
+  }
 }

@@ -1,0 +1,21 @@
+name: Publish to Packagist
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  notify-packagist:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Packagist update
+        # Packagist auto-syncs from GitHub webhooks.
+        # This step explicitly pings the API as a fallback.
+        run: |
+          curl -XPOST -H 'content-type:application/json' \
+            'https://packagist.org/api/update-package?username=${{ secrets.PACKAGIST_USERNAME }}&apiToken=${{ secrets.PACKAGIST_TOKEN }}' \
+            -d '{"repository":{"url":"https://github.com/elvinaqalarov99/spectra-laravel"}}'
