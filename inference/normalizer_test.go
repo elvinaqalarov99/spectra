@@ -5,11 +5,9 @@ import (
 )
 
 func TestNormalizerCollapseNumericIDs(t *testing.T) {
+	// Integers are always dynamic — collapse on first observation
 	n := NewPathNormalizer()
-	n.Observe("/users/1")
-	n.Observe("/users/42")
-	n.Observe("/users/99")
-	got := n.Observe("/users/7")
+	got := n.Observe("/users/1")
 	if got != "/users/{id}" {
 		t.Errorf("expected /users/{id}, got %s", got)
 	}
@@ -67,19 +65,21 @@ func TestNormalizerURLEncodedPlaceholder(t *testing.T) {
 }
 
 func TestNormalizerSHA1Token(t *testing.T) {
-	// 40-char hex token — should collapse on first observation
+	// Both the numeric user-ID (2) and the 40-char SHA1 hash are dynamic —
+	// integers always auto-collapse, hex tokens auto-collapse on first observation.
 	n := NewPathNormalizer()
 	got := n.Observe("/auth/login/auto/2/9ff90eea5588ff1645144480e52694db4125ddf3")
-	if got != "/auth/login/auto/2/{id}" {
-		t.Errorf("expected /auth/login/auto/2/{id}, got %s", got)
+	if got != "/auth/login/auto/{id}/{id}" {
+		t.Errorf("expected /auth/login/auto/{id}/{id}, got %s", got)
 	}
 }
 
 func TestNormalizerHexTokenSingleObservation(t *testing.T) {
-	// Token should become {id} even with only 1 observation
+	// Token should become {id} even with only 1 observation;
+	// the preceding numeric segment (5) also auto-collapses.
 	n := NewPathNormalizer()
 	got := n.Observe("/email/verify/5/a3f1c2d4e5b6a7f8c9d0e1f2a3b4c5d6")
-	if got != "/email/verify/5/{id}" {
-		t.Errorf("expected /email/verify/5/{id}, got %s", got)
+	if got != "/email/verify/{id}/{id}" {
+		t.Errorf("expected /email/verify/{id}/{id}, got %s", got)
 	}
 }

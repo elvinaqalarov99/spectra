@@ -15,12 +15,15 @@ var (
 	// Tokens: hex strings ≥20 chars (SHA1=40, SHA256=64, MD5=32, short tokens ≥20)
 	reHexToken = regexp.MustCompile(`(?i)^[0-9a-f]{20,}$`)
 
-	// Bad sentinel values the frontend sometimes leaks into URLs
+	// Bad sentinel values that should never appear in real API calls
 	badSegments = map[string]bool{
 		"null":      true,
 		"undefined": true,
 		"nan":       true,
 		"0":         true, // ID 0 is never a real resource
+		"xxx":       true, // common placeholder in tests/docs
+		"test":      true,
+		"example":   true,
 	}
 )
 
@@ -182,14 +185,19 @@ func mergeTrieNodes(dst, src *trieNode) {
 	}
 }
 
-// looksLikeID: numeric or UUID — needs ≥2 siblings to be collapsed
+// looksLikeID: UUID — needs ≥2 siblings to collapse (could be a named resource).
 func looksLikeID(s string) bool {
-	return reNumeric.MatchString(s) || reUUIDSeg.MatchString(s)
+	return reUUIDSeg.MatchString(s)
 }
 
-// looksLikeToken: collapsed on first observation — unambiguously dynamic.
-// Requires minimum length to avoid matching short numerics like "2" or "5".
+// looksLikeToken: auto-collapsed on first observation — unambiguously dynamic.
+// - Pure integers: no REST API has a static integer path segment
+// - Hex tokens ≥20 chars: SHA1/SHA256/MD5 hashes
+// - Long slugs ≥10 chars: opaque identifiers
 func looksLikeToken(s string) bool {
+	if reNumeric.MatchString(s) {
+		return true // integers are always dynamic IDs
+	}
 	if len(s) < 10 {
 		return false
 	}
@@ -204,7 +212,7 @@ func buildTemplate(node *trieNode, segments []string) []string {
 	rest := segments[1:]
 
 	if _, ok := node.children["{id}"]; ok {
-		if looksLikeID(seg) || looksLikeToken(seg) {
+		if looksLikeToken(seg) || looksLikeID(seg) {
 			return append([]string{"{id}"}, buildTemplate(node.children["{id}"], rest)...)
 		}
 	}
