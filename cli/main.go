@@ -176,7 +176,7 @@ func diffSpecs(committed, live map[string]interface{}) []string {
 
 func printUsage() {
 	fmt.Print(banner)
-	fmt.Println(`
+	fmt.Print(`
 Usage: spectra <command> [flags]
 
 Commands:
