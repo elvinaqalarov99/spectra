@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/unicorn/spectra/inference"
+	"github.com/elvinaqalarov99/spectra/inference"
 )
 
 // Server exposes the live spec over HTTP and pushes updates over WebSocket

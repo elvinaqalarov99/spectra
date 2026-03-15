@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/unicorn/spectra/inference"
-	"github.com/unicorn/spectra/proxy"
-	"github.com/unicorn/spectra/server"
+	"github.com/elvinaqalarov99/spectra/inference"
+	"github.com/elvinaqalarov99/spectra/proxy"
+	"github.com/elvinaqalarov99/spectra/server"
 )
 
 const banner = `

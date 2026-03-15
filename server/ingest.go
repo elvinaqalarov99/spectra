@@ -5,7 +5,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/unicorn/spectra/inference"
+	"github.com/elvinaqalarov99/spectra/inference"
 )
 
 // ingestPayload is the JSON body sent by SDK middlewares
