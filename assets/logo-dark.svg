@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 120" width="480" height="120">
+  <!-- Dark background pill — for use on light backgrounds -->
+  <rect x="0" y="0" width="480" height="120" rx="16" fill="#0f0f1a"/>
+
+  <defs>
+    <linearGradient id="spectrumGradD" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="#6366f1"/>
+      <stop offset="33%"  stop-color="#8b5cf6"/>
+      <stop offset="66%"  stop-color="#06b6d4"/>
+      <stop offset="100%" stop-color="#10b981"/>
+    </linearGradient>
+    <filter id="glowD" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Prism -->
+  <polygon
+    points="60,18 16,94 104,94"
+    fill="#0f0f1a"
+    stroke="url(#spectrumGradD)"
+    stroke-width="2.5"
+    stroke-linejoin="round"
+  />
+  <polygon
+    points="60,26 24,88 96,88"
+    fill="none"
+    stroke="#ffffff"
+    stroke-width="0.5"
+    stroke-opacity="0.06"
+  />
+
+  <!-- Incoming ray -->
+  <line x1="8" y1="44" x2="42" y2="62"
+    stroke="#ffffff" stroke-width="2" stroke-linecap="round"
+    stroke-opacity="0.9" filter="url(#glowD)"/>
+
+  <!-- Spectrum rays -->
+  <line x1="76" y1="64" x2="118" y2="46" stroke="#818cf8" stroke-width="2.2" stroke-linecap="round" filter="url(#glowD)"/>
+  <line x1="76" y1="66" x2="118" y2="55" stroke="#a78bfa" stroke-width="2.2" stroke-linecap="round" filter="url(#glowD)"/>
+  <line x1="76" y1="68" x2="118" y2="64" stroke="#22d3ee" stroke-width="2.2" stroke-linecap="round" filter="url(#glowD)"/>
+  <line x1="76" y1="70" x2="118" y2="73" stroke="#2dd4bf" stroke-width="2.2" stroke-linecap="round" filter="url(#glowD)"/>
+  <line x1="76" y1="72" x2="118" y2="82" stroke="#34d399" stroke-width="2.2" stroke-linecap="round" filter="url(#glowD)"/>
+
+  <!-- Wordmark -->
+  <text
+    x="138" y="72"
+    font-family="'SF Pro Display', 'Inter', 'Helvetica Neue', Arial, sans-serif"
+    font-size="48"
+    font-weight="700"
+    letter-spacing="-1.5"
+    fill="url(#spectrumGradD)"
+  >Spectra</text>
+
+  <!-- Tagline -->
+  <text
+    x="139" y="96"
+    font-family="'SF Pro Text', 'Inter', 'Helvetica Neue', Arial, sans-serif"
+    font-size="13"
+    font-weight="400"
+    letter-spacing="2.5"
+    fill="#4b5563"
+  >API DOCS THAT CAN'T LIE</text>
+</svg>
