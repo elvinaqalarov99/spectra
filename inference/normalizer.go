@@ -1,6 +1,7 @@
 package inference
 
 import (
+	"net/url"
 	"regexp"
 	"strings"
 	"sync"
@@ -9,15 +10,24 @@ import (
 var (
 	reNumeric = regexp.MustCompile(`^\d+$`)
 	reUUIDSeg = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
-	reSlug    = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{8,}[a-z0-9])?$`) // long slug-like IDs
+	reSlug    = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{8,}[a-z0-9])?$`)
+
+	// Tokens: hex strings ≥20 chars (SHA1=40, SHA256=64, MD5=32, short tokens ≥20)
+	reHexToken = regexp.MustCompile(`(?i)^[0-9a-f]{20,}$`)
+
+	// Bad sentinel values the frontend sometimes leaks into URLs
+	badSegments = map[string]bool{
+		"null":      true,
+		"undefined": true,
+		"nan":       true,
+		"0":         true, // ID 0 is never a real resource
+	}
 )
 
 // trieNode builds a prefix-trie of path segments to detect parameter positions
 type trieNode struct {
-	mu       sync.RWMutex
 	children map[string]*trieNode
-	count    int // how many distinct values appeared at this position
-	isParam  bool
+	count    int
 }
 
 // PathNormalizer accumulates path observations and produces normalized templates
@@ -30,22 +40,44 @@ func NewPathNormalizer() *PathNormalizer {
 	return &PathNormalizer{root: &trieNode{children: map[string]*trieNode{}}}
 }
 
-// Observe records a raw URL path and returns the normalized template, e.g. /users/{id}
+// Observe records a raw URL path and returns the normalized template.
+// Returns "" if the path should be skipped (contains null/undefined/etc).
 func (n *PathNormalizer) Observe(rawPath string) string {
-	rawPath = strings.Split(rawPath, "?")[0] // strip query string
+	// Strip query string and URL-decode (%7Buuid%7D → {uuid})
+	rawPath = strings.Split(rawPath, "?")[0]
+	if decoded, err := url.PathUnescape(rawPath); err == nil {
+		rawPath = decoded
+	}
+
 	segments := splitPath(rawPath)
 
+	// Skip paths with sentinel segments — frontend bug, not real endpoints
+	for _, seg := range segments {
+		if badSegments[strings.ToLower(seg)] {
+			return ""
+		}
+		// Skip paths where a segment is literally a template placeholder
+		// e.g. {uuid} was left unresolved by the client
+		if strings.HasPrefix(seg, "{") && strings.HasSuffix(seg, "}") {
+			// Replace it with {id} and return immediately — no need to record
+			normalized := make([]string, len(segments))
+			for i, s := range segments {
+				if strings.HasPrefix(s, "{") && strings.HasSuffix(s, "}") {
+					normalized[i] = "{id}"
+				} else {
+					normalized[i] = s
+				}
+			}
+			return "/" + strings.Join(normalized, "/")
+		}
+	}
+
 	n.mu.Lock()
+	defer n.mu.Unlock()
+
 	insertTrie(n.root, segments)
-	n.mu.Unlock()
-
-	n.mu.Lock()
 	markParams(n.root)
-	n.mu.Unlock()
-
-	n.mu.Lock()
 	template := buildTemplate(n.root, segments)
-	n.mu.Unlock()
 
 	return "/" + strings.Join(template, "/")
 }
@@ -84,35 +116,53 @@ func insertTrie(node *trieNode, segments []string) {
 	insertTrie(child, segments[1:])
 }
 
-// markParams scans siblings: if a node has ≥2 children that look like IDs,
-// collapse them into a single "{param}" node.
+// markParams collapses ID-like siblings into {id}.
+// Tokens (hex hashes, etc.) are collapsed even with a single observation.
+// Regular IDs (numeric, UUID) require ≥2 distinct values.
 func markParams(node *trieNode) {
 	if len(node.children) == 0 {
 		return
 	}
 
-	// First recurse
+	// Recurse first
 	for _, child := range node.children {
 		markParams(child)
 	}
 
-	// Collect candidate siblings (exclude already-parameterised ones)
+	// Pass 1: collapse tokens immediately — single observation is enough
+	// (hex hashes, SHA1 tokens, etc. are unambiguously dynamic)
+	tokenCandidates := []string{}
+	for seg := range node.children {
+		if seg != "{id}" && looksLikeToken(seg) {
+			tokenCandidates = append(tokenCandidates, seg)
+		}
+	}
+	if len(tokenCandidates) > 0 {
+		merged := &trieNode{children: map[string]*trieNode{}}
+		for _, seg := range tokenCandidates {
+			mergeTrieNodes(merged, node.children[seg])
+			delete(node.children, seg)
+		}
+		if existing, ok := node.children["{id}"]; ok {
+			mergeTrieNodes(existing, merged)
+		} else {
+			node.children["{id}"] = merged
+		}
+	}
+
+	// Pass 2: collapse numeric / UUID IDs when ≥2 distinct values seen
 	paramCandidates := []string{}
 	for seg := range node.children {
 		if seg != "{id}" && looksLikeID(seg) {
 			paramCandidates = append(paramCandidates, seg)
 		}
 	}
-
 	if len(paramCandidates) >= 2 {
-		// Merge all candidates into a single {id} node
 		merged := &trieNode{children: map[string]*trieNode{}}
 		for _, seg := range paramCandidates {
-			child := node.children[seg]
-			mergeTrieNodes(merged, child)
+			mergeTrieNodes(merged, node.children[seg])
 			delete(node.children, seg)
 		}
-		// If {id} already exists, merge into it; otherwise create
 		if existing, ok := node.children["{id}"]; ok {
 			mergeTrieNodes(existing, merged)
 		} else {
@@ -132,8 +182,18 @@ func mergeTrieNodes(dst, src *trieNode) {
 	}
 }
 
+// looksLikeID: numeric or UUID — needs ≥2 siblings to be collapsed
 func looksLikeID(s string) bool {
-	return reNumeric.MatchString(s) || reUUIDSeg.MatchString(s) || reSlug.MatchString(s)
+	return reNumeric.MatchString(s) || reUUIDSeg.MatchString(s)
+}
+
+// looksLikeToken: collapsed on first observation — unambiguously dynamic.
+// Requires minimum length to avoid matching short numerics like "2" or "5".
+func looksLikeToken(s string) bool {
+	if len(s) < 10 {
+		return false
+	}
+	return reHexToken.MatchString(s) || reSlug.MatchString(s)
 }
 
 func buildTemplate(node *trieNode, segments []string) []string {
@@ -143,16 +203,14 @@ func buildTemplate(node *trieNode, segments []string) []string {
 	seg := segments[0]
 	rest := segments[1:]
 
-	// Check if this segment was collapsed into {id}
 	if _, ok := node.children["{id}"]; ok {
-		if looksLikeID(seg) {
+		if looksLikeID(seg) || looksLikeToken(seg) {
 			return append([]string{"{id}"}, buildTemplate(node.children["{id}"], rest)...)
 		}
 	}
 	if child, ok := node.children[seg]; ok {
 		return append([]string{seg}, buildTemplate(child, rest)...)
 	}
-	// Fallback: literal
 	return append([]string{seg}, rest...)
 }
 

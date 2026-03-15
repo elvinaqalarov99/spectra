@@ -94,6 +94,9 @@ func NewSpecMerger(title string) *SpecMerger {
 // Ingest processes a single observation and updates the spec
 func (m *SpecMerger) Ingest(obs *Observation) {
 	pathTemplate := m.normalizer.Observe(obs.RawPath)
+	if pathTemplate == "" {
+		return // bad path (null/undefined segment) — skip silently
+	}
 	obs.PathTemplate = pathTemplate
 
 	m.mu.Lock()
