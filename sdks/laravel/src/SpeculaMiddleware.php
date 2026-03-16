@@ -74,6 +74,7 @@ class SpeculaMiddleware
             'contentType'     => $request->header('Content-Type', ''),
             'durationMs'      => $durationMs,
             'stripPrefix'     => $this->stripPrefix,
+            'requiresAuth'    => $request->hasHeader('Authorization') || $request->hasHeader('X-Api-Key'),
         ]);
 
         if (!$sent) {

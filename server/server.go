@@ -11,10 +11,11 @@ import (
 
 // Server exposes the live spec over HTTP and pushes updates over WebSocket
 type Server struct {
-	merger  *inference.SpecMerger
-	hub     *wsHub
-	mux     *http.ServeMux
-	OnObs   func(*inference.Observation) // called after each SDK ingest
+	merger    *inference.SpecMerger
+	hub       *wsHub
+	mux       *http.ServeMux
+	targetURL string // backend URL for /api-proxy pass-through
+	OnObs     func(*inference.Observation) // called after each SDK ingest
 }
 
 func New(merger *inference.SpecMerger) *Server {
@@ -27,12 +28,18 @@ func New(merger *inference.SpecMerger) *Server {
 	return s
 }
 
+// SetTarget configures the backend URL that /api-proxy forwards to.
+func (s *Server) SetTarget(u string) {
+	s.targetURL = u
+}
+
 func (s *Server) routes() {
-	s.mux.HandleFunc("/spec", s.handleSpec)       // GET → fetch, DELETE → reset
+	s.mux.HandleFunc("/spec", s.handleSpec)        // GET → fetch, DELETE → reset
 	s.mux.HandleFunc("/spec.yaml", s.handleSpecYAML)
 	s.mux.HandleFunc("/spec/reset", s.handleReset) // POST /spec/reset (explicit)
 	s.mux.HandleFunc("/ws", s.handleWS)
 	s.mux.HandleFunc("/ingest", s.handleIngest)
+	s.mux.HandleFunc("/api-proxy/", s.handleAPIProxy) // pass-through for Swagger UI Execute
 	s.mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
 	})

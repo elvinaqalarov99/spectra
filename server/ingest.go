@@ -22,6 +22,7 @@ type ingestPayload struct {
 	ContentType     string          `json:"contentType"`
 	DurationMs      int             `json:"durationMs"`
 	StripPrefix     string          `json:"stripPrefix"`
+	RequiresAuth    bool            `json:"requiresAuth"`
 }
 
 // decodeStringMap unmarshals a JSON value that is either an object {} or an
@@ -66,6 +67,7 @@ func (s *Server) handleIngest(w http.ResponseWriter, r *http.Request) {
 		ResponseHeaders: decodeStringMap(p.ResponseHeaders),
 		ContentType:     p.ContentType,
 		StripPrefix:     p.StripPrefix,
+		RequiresAuth:    p.RequiresAuth,
 	}
 
 	s.merger.Ingest(obs)

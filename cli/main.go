@@ -70,10 +70,13 @@ func cmdStart(args []string) {
 	}
 	if serverURL != "" {
 		merger.SetServer(serverURL)
-		log.Printf("api:     %s  (used by Swagger UI Execute)", serverURL)
+		log.Printf("api:     %s  (proxied via localhost%s/api-proxy)", serverURL, *uiAddr)
 	}
 
 	srv := server.New(merger)
+	if serverURL != "" {
+		srv.SetTarget(serverURL)
+	}
 
 	// Start docs server (always)
 	go func() {

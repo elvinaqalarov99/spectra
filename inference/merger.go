@@ -21,6 +21,7 @@ type Observation struct {
 	ContentType     string
 	ResponseHeaders map[string]string // key response headers (Location, etc.)
 	StripPrefix     string            // path prefix to skip when grouping tags, e.g. "v1"
+	RequiresAuth    bool              // request had an Authorization / X-Api-Key header
 }
 
 // OpenAPISpec is the live-built specification
@@ -45,14 +46,15 @@ type Info struct {
 type PathItem map[string]*Operation // key = lowercase HTTP method
 
 type Operation struct {
-	Summary     string              `json:"summary,omitempty"`
-	OperationID string              `json:"operationId,omitempty"`
-	Parameters  []Parameter         `json:"parameters,omitempty"`
-	RequestBody *RequestBody        `json:"requestBody,omitempty"`
-	Responses   map[string]Response `json:"responses"`
-	Tags        []string            `json:"tags,omitempty"`
+	Summary     string                 `json:"summary,omitempty"`
+	OperationID string                 `json:"operationId,omitempty"`
+	Parameters  []Parameter            `json:"parameters,omitempty"`
+	RequestBody *RequestBody           `json:"requestBody,omitempty"`
+	Responses   map[string]Response    `json:"responses"`
+	Tags        []string               `json:"tags,omitempty"`
+	Security    []map[string][]string  `json:"security,omitempty"`
 	// internal counters (not serialized)
-	observationCount int `json:"-"`
+	observationCount int      `json:"-"`
 	flaggedFields    []string `json:"-"`
 }
 
@@ -84,7 +86,16 @@ type MediaTypeEntry struct {
 }
 
 type Components struct {
-	Schemas map[string]*JSONSchemaType `json:"schemas,omitempty"`
+	Schemas         map[string]*JSONSchemaType   `json:"schemas,omitempty"`
+	SecuritySchemes map[string]SecurityScheme    `json:"securitySchemes,omitempty"`
+}
+
+type SecurityScheme struct {
+	Type         string `json:"type"`
+	Scheme       string `json:"scheme,omitempty"`
+	BearerFormat string `json:"bearerFormat,omitempty"`
+	In           string `json:"in,omitempty"`
+	Name         string `json:"name,omitempty"`
 }
 
 // SpecMerger maintains and updates the live OpenAPI spec
@@ -145,6 +156,20 @@ func (m *SpecMerger) Ingest(obs *Observation) {
 	}
 
 	op.observationCount++
+
+	// Auth: if any observation for this operation had an auth header, mark it
+	// and ensure the global bearerAuth security scheme is registered
+	if obs.RequiresAuth && len(op.Security) == 0 {
+		op.Security = []map[string][]string{{"bearerAuth": {}}}
+		if m.spec.Components.SecuritySchemes == nil {
+			m.spec.Components.SecuritySchemes = map[string]SecurityScheme{}
+		}
+		m.spec.Components.SecuritySchemes["bearerAuth"] = SecurityScheme{
+			Type:         "http",
+			Scheme:       "bearer",
+			BearerFormat: "JWT",
+		}
+	}
 
 	// Merge query parameters
 	for k, v := range obs.QueryParams {
@@ -222,10 +247,11 @@ func (m *SpecMerger) Reset() {
 	title := m.spec.Info.Title
 	servers := m.spec.Servers
 	m.spec = &OpenAPISpec{
-		OpenAPI: "3.0.3",
-		Info:    Info{Title: title, Version: "0.0.0"},
-		Servers: servers,
-		Paths:   map[string]PathItem{},
+		OpenAPI:    "3.0.3",
+		Info:       Info{Title: title, Version: "0.0.0"},
+		Servers:    servers,
+		Paths:      map[string]PathItem{},
+		Components: Components{},
 	}
 	m.normalizer = NewPathNormalizer()
 }

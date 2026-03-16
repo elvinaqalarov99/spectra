@@ -115,6 +115,7 @@ export class SpeculaMiddleware implements NestMiddleware {
           contentType: req.headers['content-type'] ?? '',
           durationMs: Date.now() - startedAt,
           stripPrefix: this.options.stripPrefix,
+          requiresAuth: !!(req.headers['authorization'] || req.headers['x-api-key']),
         });
       });
 
@@ -135,6 +136,7 @@ export class SpeculaMiddleware implements NestMiddleware {
     contentType: string;
     durationMs: number;
     stripPrefix?: string;
+    requiresAuth?: boolean;
   }): Promise<void> {
     try {
       await fetch(this.ingestUrl, {
