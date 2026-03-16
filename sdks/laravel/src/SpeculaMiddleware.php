@@ -219,7 +219,9 @@ class SpeculaMiddleware
         if (!$sock) {
             return false;
         }
-        stream_set_blocking($sock, false);
+        // Keep blocking mode so fwrite actually transmits the data.
+        // Set a 200ms write timeout so we never stall the response.
+        stream_set_timeout($sock, 0, 200000);
         $payload = "POST /ingest HTTP/1.1\r\n"
             . "Host: $host:$port\r\n"
             . "Content-Type: application/json\r\n"
