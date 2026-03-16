@@ -5,6 +5,7 @@ namespace Specula\Laravel;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 class SpeculaMiddleware
@@ -14,27 +15,33 @@ class SpeculaMiddleware
     private bool $captureBodies;
     private array $scrubHeaders;
     private int $maxBodyBytes;
+    private bool $debug;
 
     public function __construct()
     {
-        $this->endpoint     = rtrim(config('specula.endpoint', 'http://localhost:7878'), '/');
-        $this->ignore       = config('specula.ignore', []);
+        $this->endpoint      = rtrim(config('specula.endpoint', 'http://localhost:7878'), '/');
+        $this->ignore        = config('specula.ignore', []);
         $this->captureBodies = (bool) config('specula.capture_bodies', true);
-        $this->scrubHeaders = config('specula.scrub_headers', ['authorization', 'cookie', 'x-api-key']);
-        $this->maxBodyBytes = config('specula.max_body_bytes', 256 * 1024); // 256 KB
+        $this->scrubHeaders  = config('specula.scrub_headers', ['authorization', 'cookie', 'x-api-key']);
+        $this->maxBodyBytes  = config('specula.max_body_bytes', 256 * 1024);
+        $this->debug         = (bool) config('specula.debug', false);
     }
 
     public function handle(Request $request, Closure $next): mixed
     {
+        $path = $request->path();
+
         // Skip ignored path prefixes
         foreach ($this->ignore as $prefix) {
-            if (str_starts_with($request->path(), ltrim($prefix, '/'))) {
+            if (str_starts_with($path, ltrim($prefix, '/'))) {
+                $this->log("SKIP ignored prefix '$prefix' → $path");
                 return $next($request);
             }
         }
 
-        // Skip webhook paths — they use external signatures, not user auth
+        // Skip webhook paths
         if ($this->isWebhook($request)) {
+            $this->log("SKIP webhook → $path");
             return $next($request);
         }
 
@@ -42,22 +49,33 @@ class SpeculaMiddleware
         $response   = $next($request);
         $durationMs = (int) ((microtime(true) - $startedAt) * 1000);
 
-        // Only capture API responses — skip redirects and HTML pages
+        $status = $response->getStatusCode();
+        $ct     = $response->headers->get('Content-Type', '(none)');
+
+        // Only capture API responses — skip HTML pages
         if (!$this->isApiResponse($response)) {
+            $this->log("SKIP non-API response [{$status}] Content-Type: {$ct} → $path");
             return $response;
         }
 
-        $this->sendObservation([
+        $routePath = $this->routePath($request);
+        $this->log("TRACK [{$status}] {$request->method()} $routePath  Content-Type: {$ct}");
+
+        $sent = $this->sendObservation([
             'method'          => $request->method(),
-            'rawPath'         => $this->routePath($request),
+            'rawPath'         => $routePath,
             'queryParams'     => $this->sanitizeQueryParams($request->query()),
             'requestBody'     => $this->captureRequestBody($request),
-            'statusCode'      => $response->getStatusCode(),
+            'statusCode'      => $status,
             'responseBody'    => $this->captureResponseBody($response),
             'responseHeaders' => $this->captureResponseHeaders($response),
             'contentType'     => $request->header('Content-Type', ''),
             'durationMs'      => $durationMs,
         ]);
+
+        if (!$sent) {
+            $this->log("WARN socket delivery failed for $routePath — is Specula running at {$this->endpoint}?");
+        }
 
         return $response;
     }
@@ -189,7 +207,7 @@ class SpeculaMiddleware
 
     // ── Fire-and-forget delivery ─────────────────────────────────────────────
 
-    private function sendObservation(array $obs): void
+    private function sendObservation(array $obs): bool
     {
         $json = json_encode($obs);
         $url  = parse_url($this->endpoint . '/ingest');
@@ -197,9 +215,9 @@ class SpeculaMiddleware
         $port = $url['port'] ?? 7878;
 
         $errno = $errstr = null;
-        $sock  = @fsockopen($host, $port, $errno, $errstr, 0.05);
+        $sock  = @fsockopen($host, $port, $errno, $errstr, 0.1);
         if (!$sock) {
-            return;
+            return false;
         }
         stream_set_blocking($sock, false);
         $payload = "POST /ingest HTTP/1.1\r\n"
@@ -210,5 +228,15 @@ class SpeculaMiddleware
             . $json;
         @fwrite($sock, $payload);
         @fclose($sock);
+        return true;
+    }
+
+    // ── Debug logging ────────────────────────────────────────────────────────
+
+    private function log(string $message): void
+    {
+        if ($this->debug) {
+            Log::channel('single')->debug("[Specula] $message");
+        }
     }
 }

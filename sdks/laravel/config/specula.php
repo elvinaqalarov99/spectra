@@ -77,4 +77,16 @@ return [
         'x-api-key',
         'x-auth-token',
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Debug mode
+    |--------------------------------------------------------------------------
+    | When enabled, Specula logs every decision (TRACK / SKIP / WARN) to
+    | Laravel's single log channel. Use this to diagnose missing endpoints.
+    |
+    | Enable: SPECULA_DEBUG=true in .env
+    | Then:   tail -f storage/logs/laravel.log | grep Specula
+    */
+    'debug' => env('SPECULA_DEBUG', false),
 ];
