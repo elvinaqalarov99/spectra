@@ -244,14 +244,8 @@ func mergeQueryParam(op *Operation, name, value string) {
 
 func inferTags(path string) []string {
 	parts := strings.Split(strings.Trim(path, "/"), "/")
-	// Walk past common non-semantic prefixes: api, v1, v2, user, admin
-	skipPrefixes := map[string]bool{"api": true, "user": true, "admin": true, "v1": true, "v2": true, "v3": true}
 	for i, p := range parts {
 		if p == "" {
-			continue
-		}
-		isVersion := strings.HasPrefix(p, "v") && len(p) <= 3
-		if skipPrefixes[p] || isVersion {
 			continue
 		}
 		// First meaningful segment becomes the tag
