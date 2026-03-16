@@ -80,6 +80,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Route prefix to strip when grouping endpoints into tags
+    |--------------------------------------------------------------------------
+    | Specula uses the first meaningful path segment as the Swagger tag (group).
+    | If your routes start with a version prefix like /v1/..., set this so
+    | the tag is taken from the resource segment instead (e.g. "user", "editor").
+    |
+    | Examples: 'v1', 'api/v2', ''  (empty = auto-detect common version patterns)
+    */
+    'strip_prefix' => env('SPECULA_STRIP_PREFIX', 'v1'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Debug mode
     |--------------------------------------------------------------------------
     | When enabled, Specula logs every decision (TRACK / SKIP / WARN) to

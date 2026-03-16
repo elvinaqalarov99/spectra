@@ -16,6 +16,7 @@ class SpeculaMiddleware
     private array $scrubHeaders;
     private int $maxBodyBytes;
     private bool $debug;
+    private string $stripPrefix;
 
     public function __construct()
     {
@@ -25,6 +26,7 @@ class SpeculaMiddleware
         $this->scrubHeaders  = config('specula.scrub_headers', ['authorization', 'cookie', 'x-api-key']);
         $this->maxBodyBytes  = config('specula.max_body_bytes', 256 * 1024);
         $this->debug         = (bool) config('specula.debug', false);
+        $this->stripPrefix   = config('specula.strip_prefix', 'v1');
     }
 
     public function handle(Request $request, Closure $next): mixed
@@ -71,6 +73,7 @@ class SpeculaMiddleware
             'responseHeaders' => (object) $this->captureResponseHeaders($response),
             'contentType'     => $request->header('Content-Type', ''),
             'durationMs'      => $durationMs,
+            'stripPrefix'     => $this->stripPrefix,
         ]);
 
         if (!$sent) {

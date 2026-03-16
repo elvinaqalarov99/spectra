@@ -20,6 +20,7 @@ type Observation struct {
 	ResponseBody    []byte
 	ContentType     string
 	ResponseHeaders map[string]string // key response headers (Location, etc.)
+	StripPrefix     string            // path prefix to skip when grouping tags, e.g. "v1"
 }
 
 // OpenAPISpec is the live-built specification
@@ -130,11 +131,13 @@ func (m *SpecMerger) Ingest(obs *Observation) {
 	method := strings.ToLower(obs.Method)
 	op, exists := pathItem[method]
 	if !exists {
+		// Strip user-configured prefix (e.g. "v1") before computing tag/opID
+		tagPath := stripPathPrefix(pathTemplate, obs.StripPrefix)
 		op = &Operation{
 			Summary:     fmt.Sprintf("%s %s", strings.ToUpper(method), pathTemplate),
-			OperationID: buildOperationID(method, pathTemplate),
+			OperationID: buildOperationID(method, tagPath),
 			Responses:   map[string]Response{},
-			Tags:        inferTags(pathTemplate),
+			Tags:        inferTags(tagPath),
 		}
 		// Extract path parameters
 		op.Parameters = extractPathParams(pathTemplate)
@@ -285,6 +288,20 @@ func mergeQueryParam(op *Operation, name, value string) {
 	})
 }
 
+// stripPathPrefix removes the given prefix segment from path for tag/opID inference.
+// e.g. stripPathPrefix("/v1/user/login", "v1") → "/user/login"
+// If prefix is empty, falls back to the isVersionSegment heuristic.
+func stripPathPrefix(path, prefix string) string {
+	if prefix == "" {
+		return path
+	}
+	p := "/" + strings.Trim(prefix, "/") + "/"
+	if strings.HasPrefix(path, p) {
+		return path[len(p)-1:]
+	}
+	return path
+}
+
 // isVersionSegment returns true for path prefix segments that are not
 // meaningful resource names: v1, v2, v1.0, api, etc.
 func isVersionSegment(s string) bool {
@@ -307,7 +324,7 @@ func inferTags(path string) []string {
 		if p == "" || strings.HasPrefix(p, "{") || isVersionSegment(p) {
 			continue
 		}
-		return []string{strings.ReplaceAll(p, "-", "_")}
+		return []string{strings.ReplaceAll(p, "-", " ")}
 	}
 	return []string{"default"}
 }

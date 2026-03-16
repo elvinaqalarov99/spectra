@@ -8,12 +8,19 @@ export interface SpeculaOptions {
   ignore?: string[];
   /** Whether to include request/response bodies (default: true) */
   captureBodies?: boolean;
+  /**
+   * Route prefix to strip when grouping endpoints into Swagger tags.
+   * e.g. 'v1' → /v1/user/login groups under "user" not "v1".
+   * Default: 'v1'. Set to '' to disable.
+   */
+  stripPrefix?: string;
 }
 
 const DEFAULT_OPTIONS: Required<SpeculaOptions> = {
   endpoint: 'http://localhost:7878',
   ignore: ['/health', '/metrics', '/favicon.ico'],
   captureBodies: true,
+  stripPrefix: 'v1',
 };
 
 @Injectable()
@@ -107,6 +114,7 @@ export class SpeculaMiddleware implements NestMiddleware {
           responseHeaders,
           contentType: req.headers['content-type'] ?? '',
           durationMs: Date.now() - startedAt,
+          stripPrefix: this.options.stripPrefix,
         });
       });
 
@@ -126,6 +134,7 @@ export class SpeculaMiddleware implements NestMiddleware {
     responseHeaders?: Record<string, string>;
     contentType: string;
     durationMs: number;
+    stripPrefix?: string;
   }): Promise<void> {
     try {
       await fetch(this.ingestUrl, {
