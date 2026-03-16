@@ -144,6 +144,11 @@ func (m *SpecMerger) Ingest(obs *Observation) {
 				ct = "application/json"
 			}
 			ct = strings.Split(ct, ";")[0]
+			// For multipart, convert sentinel "__file__" string properties
+			// to { type: string, format: binary } in the schema
+			if strings.HasPrefix(ct, "multipart/") {
+				schema = applyMultipartFileFields(schema)
+			}
 			if op.RequestBody == nil {
 				op.RequestBody = &RequestBody{
 					Required: true,
@@ -302,6 +307,21 @@ func unwrapPaginatedResponse(schema *JSONSchemaType) *JSONSchemaType {
 			"links": {Type: "object"},
 		},
 	}
+}
+
+// applyMultipartFileFields converts string properties with example "__file__"
+// (sentinel sent by SDK middlewares for file upload fields) into
+// { type: string, format: binary } as required by OpenAPI multipart schemas.
+func applyMultipartFileFields(schema *JSONSchemaType) *JSONSchemaType {
+	if schema == nil || schema.Type != "object" || schema.Properties == nil {
+		return schema
+	}
+	for k, prop := range schema.Properties {
+		if prop != nil && prop.Type == "string" && prop.Example == "__file__" {
+			schema.Properties[k] = &JSONSchemaType{Type: "string", Format: "binary"}
+		}
+	}
+	return schema
 }
 
 // SortedPaths returns path keys sorted for stable output
