@@ -8,17 +8,33 @@ import (
 	"github.com/elvinaqalarov99/specula/inference"
 )
 
-// ingestPayload is the JSON body sent by SDK middlewares
+// ingestPayload is the JSON body sent by SDK middlewares.
+// QueryParams and ResponseHeaders use json.RawMessage so we can tolerate
+// PHP sending [] (empty array) instead of {} (empty object) for empty maps.
 type ingestPayload struct {
-	Method          string            `json:"method"`
-	RawPath         string            `json:"rawPath"`
-	QueryParams     map[string]string `json:"queryParams"`
-	RequestBody     string            `json:"requestBody"`
-	StatusCode      int               `json:"statusCode"`
-	ResponseBody    string            `json:"responseBody"`
-	ResponseHeaders map[string]string `json:"responseHeaders"`
-	ContentType     string            `json:"contentType"`
-	DurationMs      int               `json:"durationMs"`
+	Method          string          `json:"method"`
+	RawPath         string          `json:"rawPath"`
+	QueryParams     json.RawMessage `json:"queryParams"`
+	RequestBody     string          `json:"requestBody"`
+	StatusCode      int             `json:"statusCode"`
+	ResponseBody    string          `json:"responseBody"`
+	ResponseHeaders json.RawMessage `json:"responseHeaders"`
+	ContentType     string          `json:"contentType"`
+	DurationMs      int             `json:"durationMs"`
+}
+
+// decodeStringMap unmarshals a JSON value that is either an object {} or an
+// empty array [] (PHP encodes empty associative arrays as []).
+func decodeStringMap(raw json.RawMessage) map[string]string {
+	if len(raw) == 0 {
+		return nil
+	}
+	var m map[string]string
+	if err := json.Unmarshal(raw, &m); err == nil {
+		return m
+	}
+	// Was [] or some other non-object — treat as empty
+	return nil
 }
 
 func (s *Server) handleIngest(w http.ResponseWriter, r *http.Request) {
@@ -42,11 +58,11 @@ func (s *Server) handleIngest(w http.ResponseWriter, r *http.Request) {
 	obs := &inference.Observation{
 		Method:          p.Method,
 		RawPath:         p.RawPath,
-		QueryParams:     p.QueryParams,
+		QueryParams:     decodeStringMap(p.QueryParams),
 		RequestBody:     []byte(p.RequestBody),
 		StatusCode:      p.StatusCode,
 		ResponseBody:    []byte(p.ResponseBody),
-		ResponseHeaders: p.ResponseHeaders,
+		ResponseHeaders: decodeStringMap(p.ResponseHeaders),
 		ContentType:     p.ContentType,
 	}
 

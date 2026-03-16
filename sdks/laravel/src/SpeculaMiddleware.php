@@ -64,11 +64,11 @@ class SpeculaMiddleware
         $sent = $this->sendObservation([
             'method'          => $request->method(),
             'rawPath'         => $routePath,
-            'queryParams'     => $this->sanitizeQueryParams($request->query()),
+            'queryParams'     => (object) $this->sanitizeQueryParams($request->query()),
             'requestBody'     => $this->captureRequestBody($request),
             'statusCode'      => $status,
             'responseBody'    => $this->captureResponseBody($response),
-            'responseHeaders' => $this->captureResponseHeaders($response),
+            'responseHeaders' => (object) $this->captureResponseHeaders($response),
             'contentType'     => $request->header('Content-Type', ''),
             'durationMs'      => $durationMs,
         ]);
