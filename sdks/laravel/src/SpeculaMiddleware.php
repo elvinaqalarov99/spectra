@@ -210,27 +210,34 @@ class SpeculaMiddleware
     private function sendObservation(array $obs): bool
     {
         $json = json_encode($obs);
-        $url  = parse_url($this->endpoint . '/ingest');
-        $host = $url['host'] ?? 'localhost';
-        $port = $url['port'] ?? 7878;
-
-        $errno = $errstr = null;
-        $sock  = @fsockopen($host, $port, $errno, $errstr, 0.1);
-        if (!$sock) {
+        if ($json === false) {
             return false;
         }
-        // Keep blocking mode so fwrite actually transmits the data.
-        // Set a 200ms write timeout so we never stall the response.
-        stream_set_timeout($sock, 0, 200000);
-        $payload = "POST /ingest HTTP/1.1\r\n"
-            . "Host: $host:$port\r\n"
-            . "Content-Type: application/json\r\n"
-            . "Content-Length: " . strlen($json) . "\r\n"
-            . "Connection: close\r\n\r\n"
-            . $json;
-        @fwrite($sock, $payload);
-        @fclose($sock);
-        return true;
+
+        $url = $this->endpoint . '/ingest';
+
+        // Use curl — far more reliable than raw fsockopen for HTTP delivery.
+        // 50ms connect timeout, 300ms total. We never read the response.
+        $ch = curl_init($url);
+        if (!$ch) {
+            return false;
+        }
+
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => $json,
+            CURLOPT_HTTPHEADER     => ['Content-Type: application/json', 'Expect:'],
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_NOSIGNAL       => true,   // safe in multi-threaded PHP-FPM
+            CURLOPT_CONNECTTIMEOUT_MS => 50,
+            CURLOPT_TIMEOUT_MS     => 300,
+        ]);
+
+        curl_exec($ch);
+        $ok = curl_errno($ch) === 0;
+        curl_close($ch);
+
+        return $ok;
     }
 
     // ── Debug logging ────────────────────────────────────────────────────────
