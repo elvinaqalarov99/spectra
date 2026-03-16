@@ -42,8 +42,8 @@ class SpeculaMiddleware
         $response   = $next($request);
         $durationMs = (int) ((microtime(true) - $startedAt) * 1000);
 
-        // Only capture JSON responses — skip file downloads, redirects, HTML
-        if (!$this->isJsonResponse($response)) {
+        // Only capture API responses — skip redirects and HTML pages
+        if (!$this->isApiResponse($response)) {
             return $response;
         }
 
@@ -146,20 +146,36 @@ class SpeculaMiddleware
         return '/' . $request->path();
     }
 
-    private function isJsonResponse(SymfonyResponse $response): bool
+    private function isApiResponse(SymfonyResponse $response): bool
     {
+        $status = $response->getStatusCode();
+
+        // Skip redirects — these are web routes, not API endpoints
+        if ($status >= 300 && $status < 400) {
+            return false;
+        }
+
         $ct = $response->headers->get('Content-Type', '');
+
+        // Skip HTML — definitely not an API endpoint
+        if (str_contains($ct, 'text/html')) {
+            return false;
+        }
+
+        // Explicit JSON content-type
         if (str_contains($ct, 'application/json') || str_contains($ct, 'application/vnd.api+json')) {
             return true;
         }
-        // Some endpoints return JSON without the correct Content-Type header.
-        // Sniff the body: if it starts with { or [ it's JSON.
+
+        // Sniff body shape — some apps forget to set Content-Type
         $body = $response->getContent();
         if (!empty($body)) {
             $first = ltrim($body)[0] ?? '';
             return $first === '{' || $first === '[';
         }
-        return false;
+
+        // No body (e.g. 201 Created, 204 No Content) — still a valid API endpoint
+        return true;
     }
 
     private function isWebhook(Request $request): bool
